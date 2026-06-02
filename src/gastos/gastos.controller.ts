@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { GastosService } from './gastos.service';
 
 @Controller('gastos')
@@ -13,6 +13,15 @@ export class GastosController {
   @Get()
   obtenerGastos() {
     return this.gastosService.obtenerGastos();
+  }
+
+  // NUEVA RUTA: Buscar Gastos por Fechas
+  @Get('filtrar')
+  obtenerGastosFiltrados(
+    @Query('inicio') inicio: string,
+    @Query('fin') fin: string
+  ) {
+    return this.gastosService.obtenerGastosFiltrados(inicio, fin);
   }
 
   @Get('hoy')

@@ -19,6 +19,14 @@ export class GastosService {
     return await this.gastoRepo.find();
   }
 
+  // NUEVO: OBTENER GASTOS FILTRADOS POR RANGO DE FECHAS
+  async obtenerGastosFiltrados(inicio: string, fin: string): Promise<Gasto[]> {
+    return await this.gastoRepo.createQueryBuilder('gasto')
+      .where('DATE(gasto.fecha) BETWEEN :inicio AND :fin', { inicio, fin })
+      .orderBy('gasto.fecha', 'DESC')
+      .getMany();
+  }
+
   async obtenerGastosHoy(): Promise<Gasto[]> {
     return await this.gastoRepo.createQueryBuilder('gasto')
       .where('DATE(gasto.fecha) = CURRENT_DATE')

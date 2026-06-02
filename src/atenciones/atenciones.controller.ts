@@ -16,8 +16,12 @@ export class AtencionesController {
   }
 
   @Get('deudas')
-  obtenerDeudas(@Query('dni') dni?: string) {
-    return this.atencionesService.obtenerDeudas(dni);
+  obtenerDeudas(
+    @Query('inicio') inicio: string,
+    @Query('fin') fin: string,
+    @Query('termino') termino?: string
+  ) {
+    return this.atencionesService.obtenerDeudas(inicio, fin, termino);
   }
 
   // NUEVA RUTA: Permite actualizar todo el procedimiento (nombre, montos, citas)

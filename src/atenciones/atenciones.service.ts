@@ -105,16 +105,25 @@ export class AtencionesService {
     return await this.detalleRepo.save(procedimiento);
   }
 
-  // OBTENER DEUDAS CON FILTRO INTELIGENTE POR DNI (Opcional)
-  async obtenerDeudas(dni?: string): Promise<DetalleProcedimiento[]> {
+  // OBTENER DEUDAS CON FILTRO INTELIGENTE POR FECHAS Y TERMINO (DNI o Nombre)
+  async obtenerDeudas(inicio: string, fin: string, termino?: string): Promise<DetalleProcedimiento[]> {
     const query = this.detalleRepo.createQueryBuilder('procedimiento')
       .leftJoinAndSelect('procedimiento.atencion', 'atencion')
       .leftJoinAndSelect('atencion.paciente', 'paciente')
       .where('procedimiento.esDeuda = :deuda', { deuda: true });
 
-    // Si enviamos un DNI (aunque sean 3 números), filtramos usando LIKE
-    if (dni) {
-      query.andWhere('paciente.dni LIKE :dni', { dni: `%${dni}%` });
+    // 1. Filtro por rango de fechas
+    if (inicio && fin) {
+      query.andWhere('DATE(atencion.fecha) BETWEEN :inicio AND :fin', { inicio, fin });
+    }
+
+    // 2. Filtro por término (DNI o Nombre)
+    if (termino) {
+      // Usamos paréntesis para agrupar el OR y no romper las condiciones anteriores
+      query.andWhere(
+        '(paciente.dni LIKE :termino OR paciente.nombre LIKE :termino)', 
+        { termino: `%${termino}%` }
+      );
     }
 
     return await query.orderBy('atencion.fecha', 'DESC').getMany();
