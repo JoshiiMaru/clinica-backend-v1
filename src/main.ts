@@ -6,8 +6,9 @@ async function bootstrap() {
 
   app.enableCors({
     origin: 'https://clinica-frontend-v1.vercel.app',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    allowedHeaders: 'Content-Type, Accept, Authorization', // Crucial para JWT e intercambio de JSON
   });
 
   const puerto = process.env.PORT || 3000;
