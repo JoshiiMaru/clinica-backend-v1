@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Body, Param, Patch, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { AtencionesService } from './atenciones.service';
+import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 
 @Controller('atenciones')
+@UseGuards(AccessTokenGuard)
 export class AtencionesController {
   constructor(private readonly atencionesService: AtencionesService) {}
 

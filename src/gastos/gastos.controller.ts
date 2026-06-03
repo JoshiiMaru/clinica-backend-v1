@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { GastosService } from './gastos.service';
+import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 
 @Controller('gastos')
+@UseGuards(AccessTokenGuard)
 export class GastosController {
   constructor(private readonly gastosService: GastosService) {}
 

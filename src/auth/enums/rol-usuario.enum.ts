@@ -1,4 +1,5 @@
 export enum RolUsuario {
+  SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
   RECEPCIONISTA = 'RECEPCIONISTA',
   SOPORTE = 'SOPORTE',
