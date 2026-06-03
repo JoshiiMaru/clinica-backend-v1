@@ -3,10 +3,15 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
-  // Habilitamos CORS para que Angular pueda hacer peticiones
-  app.enableCors(); 
-  
-  await app.listen(3000);
+
+  app.enableCors({
+    origin: '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
+
+  const puerto = process.env.PORT || 3000;
+  await app.listen(puerto);
+  console.log(`Aplicación corriendo en el puerto: ${puerto}`);
 }
 bootstrap();

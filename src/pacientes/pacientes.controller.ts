@@ -1,7 +1,9 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { PacientesService } from './pacientes.service';
+import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 
 @Controller('pacientes')
+@UseGuards(AccessTokenGuard)
 export class PacientesController {
   constructor(private readonly pacientesService: PacientesService) {}
 
