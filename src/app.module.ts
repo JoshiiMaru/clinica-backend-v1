@@ -10,18 +10,25 @@ import { Atencion } from './atenciones/entities/atencion.entity';
 import { Gasto } from './gastos/entities/gasto.entity';
 import { Paciente } from './pacientes/entities/paciente.entity';
 import { DetalleProcedimiento } from './atenciones/entities/detalle-procedimiento.entity';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      username: 'postgres', // Cambia esto por tus credenciales
-      password: 'postgres', // Cambia esto por tus credenciales
-      database: 'clinica_v1',
-      entities: [Usuario, Atencion, Gasto, Paciente, DetalleProcedimiento],
-      synchronize: true, // En true para desarrollo: creará las tablas automáticamente
+    ConfigModule.forRoot({
+      isGlobal: true
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        url: configService.get<string>('DATABASE_URL'),
+        autoLoadEntities: true,
+        synchronize: true,
+        ssl: {
+          rejectUnauthorized: false
+        },
+      }),
     }),
     AuthModule,
     AtencionesModule,
