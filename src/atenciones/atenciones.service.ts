@@ -159,8 +159,7 @@ export class AtencionesService {
     const atencion = await this.atencionRepo.findOne({ where: { id: idAtencion } });
     if (!atencion) throw new NotFoundException('Atención no encontrada');
     
-    // Al eliminar la atención, gracias al cascade/onDelete en la BD, 
-    // se borrarán automáticamente sus procedimientos y productos.
+    // Ahora que arreglamos la entidad, esto SOLO borrará la atención y sus hijos (procedimientos/productos)
     await this.atencionRepo.remove(atencion);
   }
 

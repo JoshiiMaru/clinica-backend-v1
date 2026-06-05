@@ -16,7 +16,7 @@ export class Atencion {
   origen: string;
 
   // Relación con el Paciente (Se mantiene intacta)
-  @ManyToOne(() => Paciente, (paciente) => paciente.atenciones, { eager: true, cascade: true })
+  @ManyToOne(() => Paciente, (paciente) => paciente.atenciones, { eager: true, cascade: ['insert', 'update'] })
   paciente: Paciente;
 
   // Relación con sus múltiples procedimientos hijos
