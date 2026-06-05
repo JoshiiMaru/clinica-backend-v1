@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Atencion } from './entities/atencion.entity';
 import { Paciente } from '../pacientes/entities/paciente.entity';
 import { DetalleProcedimiento } from './entities/detalle-procedimiento.entity';
+import { DetalleProducto } from './entities/detalle-producto.entity';
 
 @Injectable()
 export class AtencionesService {
@@ -11,13 +12,14 @@ export class AtencionesService {
     @InjectRepository(Atencion) private atencionRepo: Repository<Atencion>,
     @InjectRepository(Paciente) private pacienteRepo: Repository<Paciente>,
     @InjectRepository(DetalleProcedimiento) private detalleRepo: Repository<DetalleProcedimiento>,
+    @InjectRepository(DetalleProducto) private productoRepo: Repository<DetalleProducto>,
   ) {}
 
   // REGISTRO DE ATENCIÓN Y PROCEDIMIENTOS CON MONTOS PROPIOS
   async registrar(datos: any): Promise<Atencion> {
-    const { paciente: datosPaciente, procedimientos } = datos;
+    const { paciente: datosPaciente, procedimientos, productos } = datos; // Ahora extraemos productos
 
-    // 1. Buscar o crear al paciente por DNI
+    // Buscar o crear paciente (Se mantiene igual)
     let pacienteGuardado = await this.pacienteRepo.findOne({ where: { dni: datosPaciente.dni } });
     if (!pacienteGuardado) {
       const nuevoPaciente = this.pacienteRepo.create({
@@ -28,37 +30,49 @@ export class AtencionesService {
       pacienteGuardado = await this.pacienteRepo.save(nuevoPaciente);
     }
 
-    // 2. Crear el contenedor principal de la atención
+    // Crear el contenedor principal de la atención (Se mantiene igual)
     const nuevaAtencion = this.atencionRepo.create({
       paciente: pacienteGuardado,
       origen: 'ATENCION'
     });
     const atencionGuardada = await this.atencionRepo.save(nuevaAtencion);
 
-    // 3. Registrar cada procedimiento calculando su propio estado financiero
+    // Guardar procedimientos (Se mantiene igual)
     if (procedimientos && procedimientos.length > 0) {
       const detalles = procedimientos.map(proc => {
         const total = proc.montoTotal !== null && proc.montoTotal !== undefined ? Number(proc.montoTotal) : null;
         const pagado = Number(proc.montoPagado) || 0;
-        
-        // REQUERIMIENTO: La deuda se calcula individualmente por procedimiento
-        let esDeuda = false;
-        if (total !== null && total > 0) {
-          esDeuda = pagado < total;
-        }
+        let esDeuda = (total !== null && total > 0) ? (pagado < total) : false;
 
         return this.detalleRepo.create({
           nombreProcedimiento: proc.nombreProcedimiento,
-          fechaProximaCita: proc.fechaProximaCita || null, // Opcional
-          horaProximaCita: proc.horaProximaCita || null,   // NUEVO: Hora opcional
+          fechaProximaCita: proc.fechaProximaCita || null,
+          horaProximaCita: proc.horaProximaCita || null,
           montoTotal: total,
           montoPagado: pagado,
           esDeuda,
           atencion: atencionGuardada,
         });
       });
-      
       await this.detalleRepo.save(detalles);
+    }
+
+    // NUEVO: Guardar productos calculando su propia deuda
+    if (productos && productos.length > 0) {
+      const detallesProductos = productos.map(prod => {
+        const total = prod.montoTotal !== null && prod.montoTotal !== undefined ? Number(prod.montoTotal) : null;
+        const pagado = Number(prod.montoPagado) || 0;
+        let esDeuda = (total !== null && total > 0) ? (pagado < total) : false;
+
+        return this.productoRepo.create({
+          nombreProducto: prod.nombreProducto,
+          montoTotal: total,
+          montoPagado: pagado,
+          esDeuda,
+          atencion: atencionGuardada,
+        });
+      });
+      await this.productoRepo.save(detallesProductos);
     }
 
     return atencionGuardada;
@@ -134,13 +148,24 @@ export class AtencionesService {
     return await this.atencionRepo.createQueryBuilder('atencion')
       .leftJoinAndSelect('atencion.paciente', 'paciente')
       .leftJoinAndSelect('atencion.procedimientos', 'procedimientos')
+      .leftJoinAndSelect('atencion.productos', 'productos') // NUEVO: Traemos los productos también
       .where('DATE(atencion.fecha) = CURRENT_DATE')
       .orderBy('atencion.fecha', 'DESC')
       .getMany();
   }
 
+  // 3. NUEVO MÉTODO PARA ELIMINAR ATENCIÓN (Como lo pediste si te equivocas)
+  async eliminarAtencionCompleta(idAtencion: string): Promise<void> {
+    const atencion = await this.atencionRepo.findOne({ where: { id: idAtencion } });
+    if (!atencion) throw new NotFoundException('Atención no encontrada');
+    
+    // Al eliminar la atención, gracias al cascade/onDelete en la BD, 
+    // se borrarán automáticamente sus procedimientos y productos.
+    await this.atencionRepo.remove(atencion);
+  }
+
   // NUEVO: OBTENER AGENDA DE CITAS
-async obtenerAgenda(inicio: string, fin: string): Promise<DetalleProcedimiento[]> {
+  async obtenerAgenda(inicio: string, fin: string): Promise<DetalleProcedimiento[]> {
     return await this.detalleRepo.createQueryBuilder('procedimiento')
       .leftJoinAndSelect('procedimiento.atencion', 'atencion')
       .leftJoinAndSelect('atencion.paciente', 'paciente')
@@ -214,5 +239,97 @@ async obtenerAgenda(inicio: string, fin: string): Promise<DetalleProcedimiento[]
     procedimiento.horaProximaCita = nuevaHora || null;
 
     return await this.detalleRepo.save(procedimiento);
+  }
+
+  // NUEVO: ACTUALIZAR ATENCIÓN COMPLETA (Procedimientos y Productos)
+  async actualizarAtencionCompleta(idAtencion: string, datos: any): Promise<Atencion> {
+    const atencion = await this.atencionRepo.findOne({
+      where: { id: idAtencion },
+      relations: {
+        procedimientos: true,
+        productos: true,
+      } // Traemos todo lo que tiene actualmente
+    });
+    
+    if (!atencion) throw new NotFoundException('Atención no encontrada');
+
+    const { procedimientos, productos } = datos;
+
+    // --- LÓGICA PARA PROCEDIMIENTOS ---
+    if (procedimientos) {
+      // 1. Identificar IDs que vienen del frontend (los que no tienen ID son nuevos)
+      const idsMantenidos = procedimientos.filter(p => p.id).map(p => p.id);
+
+      // 2. Eliminar de la BD los que el usuario quitó en la interfaz
+      const idsAEliminar = atencion.procedimientos
+        .filter(p => !idsMantenidos.includes(p.id))
+        .map(p => p.id);
+        
+      if (idsAEliminar.length > 0) {
+        await this.detalleRepo.delete(idsAEliminar);
+      }
+
+      // 3. Guardar (crear o actualizar) los procedimientos
+      const procedimientosAGuardar = procedimientos.map(proc => {
+        const total = proc.montoTotal !== null && proc.montoTotal !== undefined ? Number(proc.montoTotal) : null;
+        const pagado = Number(proc.montoPagado) || 0;
+        let esDeuda = (total !== null && total > 0) ? (pagado < total) : false;
+
+        return this.detalleRepo.create({
+          id: proc.id, // ¡Clave! Si tiene ID, TypeORM lo actualiza; si no, lo inserta nuevo
+          nombreProcedimiento: proc.nombreProcedimiento,
+          fechaProximaCita: proc.fechaProximaCita || null,
+          horaProximaCita: proc.horaProximaCita || null,
+          montoTotal: total,
+          montoPagado: pagado,
+          esDeuda,
+          atencion: atencion // Lo volvemos a enlazar
+        });
+      });
+      await this.detalleRepo.save(procedimientosAGuardar);
+    }
+
+    // --- LÓGICA PARA PRODUCTOS ---
+    if (productos) {
+      const idsMantenidosProd = productos.filter(p => p.id).map(p => p.id);
+      
+      const idsAEliminarProd = atencion.productos
+        .filter(p => !idsMantenidosProd.includes(p.id))
+        .map(p => p.id);
+        
+      if (idsAEliminarProd.length > 0) {
+        await this.productoRepo.delete(idsAEliminarProd);
+      }
+
+      const productosAGuardar = productos.map(prod => {
+        const total = prod.montoTotal !== null && prod.montoTotal !== undefined ? Number(prod.montoTotal) : null;
+        const pagado = Number(prod.montoPagado) || 0;
+        let esDeuda = (total !== null && total > 0) ? (pagado < total) : false;
+
+        return this.productoRepo.create({
+          id: prod.id,
+          nombreProducto: prod.nombreProducto,
+          montoTotal: total,
+          montoPagado: pagado,
+          esDeuda,
+          atencion: atencion
+        });
+      });
+      await this.productoRepo.save(productosAGuardar);
+    }
+
+    // Finalmente, retornamos la atención ya actualizada para que el frontend la recargue
+    const atencionActualizada = await this.atencionRepo.findOne({ 
+      where: { id: idAtencion }, 
+      relations: {
+        paciente: true,
+        procedimientos: true,
+        productos: true
+      }
+    });
+
+    if (!atencionActualizada) throw new NotFoundException('Atención no encontrada');
+
+    return atencionActualizada;
   }
 }

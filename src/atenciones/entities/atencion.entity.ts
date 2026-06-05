@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, OneToMany, Column } from 'typeorm';
 import { Paciente } from '../../pacientes/entities/paciente.entity';
 import { DetalleProcedimiento } from './detalle-procedimiento.entity';
+import { DetalleProducto } from './detalle-producto.entity';
 
 @Entity('atenciones')
 export class Atencion {
@@ -21,4 +22,8 @@ export class Atencion {
   // Relación con sus múltiples procedimientos hijos
   @OneToMany(() => DetalleProcedimiento, (dp) => dp.atencion, { cascade: true, eager: true })
   procedimientos: DetalleProcedimiento[];
+
+  // NUEVO: Relación con sus múltiples productos hijos
+  @OneToMany(() => DetalleProducto, (dp) => dp.atencion, { cascade: true, eager: true })
+  productos: DetalleProducto[];
 }

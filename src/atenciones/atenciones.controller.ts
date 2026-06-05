@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Query, UseGuards, Delete, Put } from '@nestjs/common';
 import { AtencionesService } from './atenciones.service';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 
@@ -60,5 +60,15 @@ export class AtencionesController {
     @Body() datos: { fecha: string; hora: string }
   ) {
     return this.atencionesService.reprogramarCita(id, datos.fecha, datos.hora);
+  }
+
+  @Put(':id')
+  actualizarAtencionCompleta(@Param('id') id: string, @Body() datos: any) {
+    return this.atencionesService.actualizarAtencionCompleta(id, datos);
+  }
+
+  @Delete(':id')
+  eliminarAtencion(@Param('id') id: string) {
+    return this.atencionesService.eliminarAtencionCompleta(id);
   }
 }
