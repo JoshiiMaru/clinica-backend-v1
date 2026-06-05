@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Atencion } from './entities/atencion.entity';
@@ -105,42 +105,74 @@ export class AtencionesService {
     return await this.detalleRepo.save(procedimiento);
   }
 
-  // ABONAR A LA DEUDA DE UN PROCEDIMIENTO ESPECÍFICO
-  async abonarDeudaProcedimiento(idProcedimiento: string, abono: number): Promise<DetalleProcedimiento> {
-    const procedimiento = await this.detalleRepo.findOne({ where: { id: idProcedimiento } });
-    if (!procedimiento) throw new NotFoundException('Procedimiento no encontrado');
-
-    procedimiento.montoPagado = Number(procedimiento.montoPagado) + Number(abono);
-
-    if (procedimiento.montoTotal && procedimiento.montoPagado >= procedimiento.montoTotal) {
-      procedimiento.esDeuda = false;
+  // ABONAR A LA DEUDA: Es inteligente, busca si es un procedimiento o un producto
+  async abonarDeudaProcedimiento(idItem: string, abono: number): Promise<any> {
+    
+    // 1. Intentamos buscar si es un Procedimiento
+    let procedimiento = await this.detalleRepo.findOne({ where: { id: idItem } });
+    if (procedimiento) {
+      procedimiento.montoPagado = Number(procedimiento.montoPagado) + Number(abono);
+      if (procedimiento.montoTotal && procedimiento.montoPagado >= procedimiento.montoTotal) {
+        procedimiento.esDeuda = false;
+      }
+      return await this.detalleRepo.save(procedimiento);
     }
 
-    return await this.detalleRepo.save(procedimiento);
+    // 2. Si no es un Procedimiento, intentamos buscar si es un Producto
+    let producto = await this.productoRepo.findOne({ where: { id: idItem } });
+    if (producto) {
+      producto.montoPagado = Number(producto.montoPagado) + Number(abono);
+      if (producto.montoTotal && producto.montoPagado >= producto.montoTotal) {
+        producto.esDeuda = false;
+      }
+      return await this.productoRepo.save(producto);
+    }
+
+    // Si no existe en ninguno de los dos
+    throw new NotFoundException('Ítem adeudado no encontrado');
   }
 
-  // OBTENER DEUDAS CON FILTRO INTELIGENTE POR FECHAS Y TERMINO (DNI o Nombre)
-  async obtenerDeudas(inicio: string, fin: string, termino?: string): Promise<DetalleProcedimiento[]> {
-    const query = this.detalleRepo.createQueryBuilder('procedimiento')
+  // OBTENER DEUDAS: Ahora busca en procedimientos y productos al mismo tiempo
+  async obtenerDeudas(inicio: string, fin: string, termino?: string): Promise<any[]> {
+    const queryProc = this.detalleRepo.createQueryBuilder('procedimiento')
       .leftJoinAndSelect('procedimiento.atencion', 'atencion')
       .leftJoinAndSelect('atencion.paciente', 'paciente')
       .where('procedimiento.esDeuda = :deuda', { deuda: true });
 
-    // 1. Filtro por rango de fechas
+    const queryProd = this.productoRepo.createQueryBuilder('producto')
+      .leftJoinAndSelect('producto.atencion', 'atencion')
+      .leftJoinAndSelect('atencion.paciente', 'paciente')
+      .where('producto.esDeuda = :deuda', { deuda: true });
+
+    // 1. Filtro por fechas para ambos
     if (inicio && fin) {
-      query.andWhere('DATE(atencion.fecha) BETWEEN :inicio AND :fin', { inicio, fin });
+      queryProc.andWhere('DATE(atencion.fecha) BETWEEN :inicio AND :fin', { inicio, fin });
+      queryProd.andWhere('DATE(atencion.fecha) BETWEEN :inicio AND :fin', { inicio, fin });
     }
 
-    // 2. Filtro por término (DNI o Nombre)
+    // 2. Filtro por DNI o Nombre para ambos
     if (termino) {
-      // Usamos paréntesis para agrupar el OR y no romper las condiciones anteriores
-      query.andWhere(
-        '(paciente.dni LIKE :termino OR paciente.nombre LIKE :termino)', 
-        { termino: `%${termino}%` }
-      );
+      queryProc.andWhere('(paciente.dni LIKE :termino OR paciente.nombre LIKE :termino)', { termino: `%${termino}%` });
+      queryProd.andWhere('(paciente.dni LIKE :termino OR paciente.nombre LIKE :termino)', { termino: `%${termino}%` });
     }
 
-    return await query.orderBy('atencion.fecha', 'DESC').getMany();
+    // Ejecutamos ambas búsquedas al mismo tiempo
+    const [procedimientos, productos] = await Promise.all([
+      queryProc.getMany(),
+      queryProd.getMany()
+    ]);
+
+    // Añadimos una etiqueta "tipo" para el Frontend
+    const procsMapeados = procedimientos.map(p => ({ ...p, tipo: 'PROCEDIMIENTO' }));
+    const prodsMapeados = productos.map(p => ({ ...p, tipo: 'PRODUCTO' }));
+
+    // Unimos todo en una sola lista
+    const deudasCombinadas = [...procsMapeados, ...prodsMapeados];
+
+    // Ordenamos todo por la fecha de la atención (las más recientes primero)
+    deudasCombinadas.sort((a, b) => new Date(b.atencion.fecha).getTime() - new Date(a.atencion.fecha).getTime());
+
+    return deudasCombinadas;
   }
 
   // OBTENER ATENCIONES DE HOY
@@ -176,21 +208,24 @@ export class AtencionesService {
       .getMany();
   }
 
-  // NUEVO: ATENDER UNA CITA PROGRAMADA
+  // NUEVO: ATENDER UNA CITA PROGRAMADA (Ahora soporta productos)
   async atenderCita(idProcedimientoPrevio: string, datos: any): Promise<Atencion> {
+    const { procedimientos, productos } = datos;
+
+    // Validación de seguridad
+    if ((!procedimientos || procedimientos.length === 0) && (!productos || productos.length === 0)) {
+      throw new BadRequestException('Debes registrar al menos un procedimiento o un producto.');
+    }
+
     // 1. Buscamos el procedimiento original que generó la cita
     const procAnterior = await this.detalleRepo.findOne({
       where: { id: idProcedimientoPrevio },
-      relations: {
-        atencion: {
-          paciente: true,
-        },
-      },
+      relations: { atencion: { paciente: true } },
     });
 
     if (!procAnterior) throw new NotFoundException('Cita no encontrada');
 
-    // 2. Marcamos la cita antigua como "Atendida" para que desaparezca de la agenda
+    // 2. Marcamos la cita antigua como "Atendida"
     procAnterior.citaAtendida = true;
     await this.detalleRepo.save(procAnterior);
 
@@ -202,16 +237,12 @@ export class AtencionesService {
     });
     const atencionGuardada = await this.atencionRepo.save(nuevaAtencion);
 
-    // 4. Guardamos los nuevos procedimientos/recetas/operaciones que se le hicieron hoy
-    if (datos.procedimientos && datos.procedimientos.length > 0) {
-      const detalles = datos.procedimientos.map(proc => {
+    // 4. Guardamos los nuevos procedimientos
+    if (procedimientos && procedimientos.length > 0) {
+      const detalles = procedimientos.map(proc => {
         const total = proc.montoTotal !== null && proc.montoTotal !== undefined ? Number(proc.montoTotal) : null;
         const pagado = Number(proc.montoPagado) || 0;
-        
-        let esDeuda = false;
-        if (total !== null && total > 0) {
-          esDeuda = pagado < total;
-        }
+        let esDeuda = (total !== null && total > 0) ? (pagado < total) : false;
 
         return this.detalleRepo.create({
           nombreProcedimiento: proc.nombreProcedimiento,
@@ -224,6 +255,24 @@ export class AtencionesService {
         });
       });
       await this.detalleRepo.save(detalles);
+    }
+
+    // 5. NUEVO: Guardamos los nuevos productos (Si vendiste algo durante la cita)
+    if (productos && productos.length > 0) {
+      const detallesProductos = productos.map(prod => {
+        const total = prod.montoTotal !== null && prod.montoTotal !== undefined ? Number(prod.montoTotal) : null;
+        const pagado = Number(prod.montoPagado) || 0;
+        let esDeuda = (total !== null && total > 0) ? (pagado < total) : false;
+
+        return this.productoRepo.create({
+          nombreProducto: prod.nombreProducto,
+          montoTotal: total,
+          montoPagado: pagado,
+          esDeuda,
+          atencion: atencionGuardada,
+        });
+      });
+      await this.productoRepo.save(detallesProductos);
     }
 
     return atencionGuardada;
