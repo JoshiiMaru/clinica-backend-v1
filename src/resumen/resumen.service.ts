@@ -21,6 +21,7 @@ export class ResumenService {
     // 1. Buscamos ingresos usando BETWEEN para atrapar todo el rango
     const atenciones = await this.atencionRepo.createQueryBuilder('atencion')
       .leftJoinAndSelect('atencion.paciente', 'paciente')
+      .leftJoinAndSelect('atencion.productos', 'productos')
       .leftJoinAndSelect('atencion.procedimientos', 'procedimientos')
       .where('DATE(atencion.fecha) BETWEEN :inicio AND :fin', { inicio: fechaInicio, fin: fechaFin })
       .getMany();
@@ -34,10 +35,20 @@ export class ResumenService {
     const tituloFecha = fechaInicio === fechaFin ? fechaInicio : `${fechaInicio} al ${fechaFin}`;
 
     // 4. Mapeamos ingresos desglosados por cada procedimiento individual
-    const ingresos = atenciones.flatMap(a =>
+    const ingresosProcedimiento = atenciones.flatMap(a =>
       a.procedimientos.map(p => ({
         fecha: a.fecha,
         descripcion: `Ingreso - ${p.nombreProcedimiento} (${a.paciente.nombre})`,
+        monto: Number(p.montoPagado),
+        tipo: 'INGRESO',
+      }))
+    );
+
+    // 4. Mapeamos ingresos desglosados por cada procedimiento individual
+    const ingresosProductos = atenciones.flatMap(a =>
+      a.productos.map(p => ({
+        fecha: a.fecha,
+        descripcion: `Ingreso - ${p.nombreProducto} (${a.paciente.nombre})`,
         monto: Number(p.montoPagado),
         tipo: 'INGRESO',
       }))
@@ -52,11 +63,11 @@ export class ResumenService {
     }));
 
     // 6. Unimos y ordenamos cronológicamente
-    const resumenUnificado = [...ingresos, ...egresos].sort(
+    const resumenUnificado = [...ingresosProcedimiento, ...ingresosProductos, ...egresos].sort(
       (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime(),
     );
 
-    const totalIngresos = ingresos.reduce((sum, item) => sum + item.monto, 0);
+    const totalIngresos = ingresosProcedimiento.reduce((sum, item) => sum + item.monto, 0) + ingresosProductos.reduce((sum, item) => sum + item.monto, 0);
     const totalGastos = egresos.reduce((sum, item) => sum + item.monto, 0);
     const balanceNeto = totalIngresos - totalGastos;
 
