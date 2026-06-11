@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, Query, UseGuards, Post } from '@nestjs/common';
 import { PacientesService } from './pacientes.service';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 
@@ -17,6 +17,12 @@ export class PacientesController {
   @Get()
   obtenerPacientes(@Query('termino') termino?: string) {
     return this.pacientesService.obtenerPacientes(termino);
+  }
+
+  // NUEVA RUTA: Registrar paciente manualmente
+  @Post()
+  crearPaciente(@Body() datos: any) {
+    return this.pacientesService.crearPaciente(datos);
   }
 
   // NUEVA RUTA: Guardar los cambios editados del paciente

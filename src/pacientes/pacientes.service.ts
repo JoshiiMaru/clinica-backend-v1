@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Paciente } from './entities/paciente.entity';
@@ -28,6 +28,22 @@ export class PacientesService {
 
     // Ordenamos alfabéticamente por nombre
     return await query.orderBy('paciente.nombre', 'ASC').getMany();
+  }
+
+  // NUEVO: Crear un paciente manualmente desde el directorio
+  async crearPaciente(datos: any): Promise<Paciente> {
+    const existe = await this.pacienteRepo.findOne({ where: { dni: datos.dni } });
+    if (existe) {
+      throw new BadRequestException('Ya existe un paciente registrado con ese DNI');
+    }
+
+    const nuevoPaciente = this.pacienteRepo.create({
+      dni: datos.dni,
+      nombre: datos.nombre,
+      celular: datos.celular || ''
+    });
+
+    return await this.pacienteRepo.save(nuevoPaciente);
   }
 
   // NUEVO: Actualizar nombre y/o celular del paciente
