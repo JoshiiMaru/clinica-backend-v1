@@ -56,6 +56,7 @@ export class PacientesService {
 
     // Actualizamos solo los campos permitidos
     if (datos.nombre) paciente.nombre = datos.nombre;
+    if (datos.dni) paciente.dni = datos.dni; // Permite actualizar el DNI si es necesario
     if (datos.celular !== undefined) paciente.celular = datos.celular; // Permite vaciar el celular si es necesario
 
     return await this.pacienteRepo.save(paciente);
