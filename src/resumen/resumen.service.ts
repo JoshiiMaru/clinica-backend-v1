@@ -34,7 +34,7 @@ export class ResumenService {
     // 3. Formateamos el título para el frontend (ej. "2026-05-01 al 2026-05-31")
     const tituloFecha = fechaInicio === fechaFin ? fechaInicio : `${fechaInicio} al ${fechaFin}`;
 
-    // 4. Mapeamos ingresos desglosados por cada procedimiento individual
+    // 4-1. Mapeamos ingresos desglosados por cada procedimiento individual
     const ingresosProcedimiento = atenciones.flatMap(a =>
       a.procedimientos.map(p => ({
         fecha: a.fecha,
@@ -44,7 +44,7 @@ export class ResumenService {
       }))
     );
 
-    // 4. Mapeamos ingresos desglosados por cada procedimiento individual
+    // 4-2. Mapeamos ingresos desglosados por cada producto individual
     const ingresosProductos = atenciones.flatMap(a =>
       a.productos.map(p => ({
         fecha: a.fecha,

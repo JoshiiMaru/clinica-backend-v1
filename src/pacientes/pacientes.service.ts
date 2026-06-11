@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Paciente } from './entities/paciente.entity';
@@ -13,5 +13,35 @@ export class PacientesService {
   // Buscar paciente único por DNI
   async buscarPorDni(dni: string): Promise<Paciente | null> {
     return await this.pacienteRepo.findOne({ where: { dni } });
+  }
+
+  // NUEVO: Obtener todos los pacientes o filtrar por búsqueda
+  async obtenerPacientes(termino?: string): Promise<Paciente[]> {
+    const query = this.pacienteRepo.createQueryBuilder('paciente');
+
+    if (termino) {
+      // Usamos ILIKE para Postgres (ignora mayúsculas/minúsculas)
+      query.where('paciente.dni LIKE :termino OR paciente.nombre ILIKE :termino', {
+        termino: `%${termino}%`
+      });
+    }
+
+    // Ordenamos alfabéticamente por nombre
+    return await query.orderBy('paciente.nombre', 'ASC').getMany();
+  }
+
+  // NUEVO: Actualizar nombre y/o celular del paciente
+  async actualizarPaciente(id: string, datos: any): Promise<Paciente> {
+    const paciente = await this.pacienteRepo.findOne({ where: { id } });
+    
+    if (!paciente) {
+      throw new NotFoundException('Paciente no encontrado');
+    }
+
+    // Actualizamos solo los campos permitidos
+    if (datos.nombre) paciente.nombre = datos.nombre;
+    if (datos.celular !== undefined) paciente.celular = datos.celular; // Permite vaciar el celular si es necesario
+
+    return await this.pacienteRepo.save(paciente);
   }
 }
