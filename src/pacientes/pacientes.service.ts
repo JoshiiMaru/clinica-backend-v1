@@ -56,7 +56,15 @@ export class PacientesService {
 
     // Actualizamos solo los campos permitidos
     if (datos.nombre) paciente.nombre = datos.nombre;
-    if (datos.dni) paciente.dni = datos.dni; // Permite actualizar el DNI si es necesario
+
+    if (datos.dni && datos.dni !== paciente.dni) {
+      const existeDni = await this.pacienteRepo.findOne({ where: { dni: datos.dni } });
+      if (existeDni) {
+        throw new BadRequestException('Ya existe otro paciente registrado con ese DNI');
+      }
+      paciente.dni = datos.dni;
+    }
+
     if (datos.celular !== undefined) paciente.celular = datos.celular; // Permite vaciar el celular si es necesario
 
     return await this.pacienteRepo.save(paciente);
