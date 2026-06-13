@@ -180,8 +180,9 @@ export class AtencionesService {
     return await this.atencionRepo.createQueryBuilder('atencion')
       .leftJoinAndSelect('atencion.paciente', 'paciente')
       .leftJoinAndSelect('atencion.procedimientos', 'procedimientos')
-      .leftJoinAndSelect('atencion.productos', 'productos') // NUEVO: Traemos los productos también
-      .where('DATE(atencion.fecha) = CURRENT_DATE')
+      .leftJoinAndSelect('atencion.productos', 'productos')
+      // Convierte la fecha UTC a hora local (UTC-5) solo para el filtrado, sin alterar la base de datos
+      .where("DATE(atencion.fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')")
       .orderBy('atencion.fecha', 'DESC')
       .getMany();
   }
